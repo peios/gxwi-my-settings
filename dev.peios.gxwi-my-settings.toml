@@ -1,0 +1,6 @@
+# What My Settings is to a desktop (PGSS Applications): installed as
+# /usr/share/apps/dev.peios.gxwi-my-settings.toml, named for the id, by the
+# package that installs the program. It is a window and nothing else.
+title = "My Settings"
+description = "Your name, password, SSH keys and language"
+program = "/usr/bin/gxwi-my-settings"
