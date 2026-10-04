@@ -41,11 +41,11 @@ pub fn may_change(path: &str, what: &str) -> Result<(), String> {
 }
 
 /// Why a change was refused, in words.
-pub fn refused(error: &peios::Error, what: &str, path: &str) -> String {
+pub fn refused(error: &peios::Error, what: &str, _path: &str) -> String {
     match error.kind() {
         // Every key these settings write is the person's own, so a refusal
         // means someone has narrowed it on purpose.
-        ErrorKind::PermissionDenied => format!("You may look, but changing {what} needs write access to {path}, which has been taken from you."),
+        ErrorKind::PermissionDenied => format!("You can look, but you can't change {what}: someone has narrowed who may."),
         _ => format!("{what} can't be changed: {error}."),
     }
 }
