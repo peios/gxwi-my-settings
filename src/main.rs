@@ -73,10 +73,10 @@ impl Settings {
     fn nav(&self) -> Vec<Nav> {
         let section = |view: View, title, now: String, glyph, tile| Nav::Section(Section { id: view.id(), title, now, glyph, tile });
         vec![
-            section(View::Account, "Your account", account::now_account(&self.account), Glyph::User, Tile::Orange),
+            section(View::Account, "Account", account::now_account(&self.account), Glyph::User, Tile::Orange),
             section(View::Password, "Password", account::now_password(&self.account), Glyph::Lock, Tile::Green),
-            section(View::Keys, "SSH keys", account::now_keys(&self.account), Glyph::Key, Tile::Teal),
-            section(View::Language, "Language & formats", language::now(&self.language, &self.installed), Glyph::Globe, Tile::Violet),
+            section(View::Keys, "SSH Keys", account::now_keys(&self.account), Glyph::Key, Tile::Teal),
+            section(View::Language, "Language & Formats", language::now(&self.language, &self.installed), Glyph::Globe, Tile::Violet),
         ]
     }
 }

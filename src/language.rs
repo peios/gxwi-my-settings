@@ -54,7 +54,7 @@ fn describe(available: &Available) -> String {
 /// What the side says of this section.
 pub fn now(language: &Language, installed: &[Available]) -> String {
     match &language.lang {
-        None => "As this machine has it".into(),
+        None => "System Default".into(),
         Some(lang) => match installed.iter().find(|a| &a.name == lang) {
             Some(Available { language: Some(name), territory: Some(place), .. }) => format!("{name} ({place})"),
             Some(Available { language: Some(name), .. }) => name.clone(),
@@ -65,7 +65,6 @@ pub fn now(language: &Language, installed: &[Available]) -> String {
 
 pub fn render(language: &Language, installed: &[Available]) -> String {
     let may = language.may.is_ok();
-    let machine = installed.iter().find(|a| a.name == language.machine_lang).map_or_else(|| language.machine_lang.clone(), describe);
     let options = |first: String| {
         let mut options = vec![(String::new(), first)];
         options.extend(installed.iter().map(|a| (a.name.clone(), describe(a))));
@@ -75,23 +74,23 @@ pub fn render(language: &Language, installed: &[Available]) -> String {
         "{}{}",
         settings::row(
             "Language",
-            "What programs speak to you in, where they can.",
-            &settings::select("lang", "Language", &options(format!("As this machine has it: {machine}")), may),
+            "The language programs use, where they support it.",
+            &settings::select("lang", "Language", &options("System Default".into()), may),
         ),
         settings::row(
             "Formats",
-            "How dates, numbers, money, measures and paper sizes are written.",
-            &settings::select("formats", "Formats", &options("As the language writes them".into()), may),
+            "How dates, numbers, currency, measurements and paper sizes are written.",
+            &settings::select("formats", "Formats", &options("Match Language".into()), may),
         ),
     );
     let foot = match &language.may {
         Err(why) => settings::locked(why),
-        Ok(()) => settings::hint("Each applies the next time you sign in. A language that isn't listed is added by an administrator, by installing its language pack."),
+        Ok(()) => settings::hint("Applies at your next sign-in. An administrator can add languages by installing language packs."),
     };
     format!(
         "{}{}",
-        settings::head(Glyph::Globe, Tile::Violet, "Language & formats", "Yours, over this machine's."),
-        settings::group("Language and formats", &rows, &foot)
+        settings::head(Glyph::Globe, Tile::Violet, "Language & Formats", "Your language, over the System Default."),
+        settings::group("Language & Formats", &rows, &foot)
     )
 }
 
@@ -109,5 +108,5 @@ pub fn save(fields: &Fields) -> Result<String, String> {
         values.push((category, (!formats.is_empty()).then(|| Data::Sz(formats.to_string()))));
     }
     reg::set(OWN, "your language", &values)?;
-    Ok("Saved. It applies the next time you sign in.".into())
+    Ok("Saved. Applies at your next sign-in.".into())
 }
