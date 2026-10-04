@@ -6,7 +6,7 @@ license = "MIT"
 publish = false
 
 [dependencies]
-# Beside this checkout until a libgxwi with the dialog role is released.
+# Beside this checkout until gxwi is pushed, then pinned to a commit.
 libgxwi = { path = "../gxwi/libgxwi" }
 # The registry. Every crate in one program must pin the same revision:
 # `peios-sys` links libpeios, and a program can hold only one.
