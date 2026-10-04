@@ -10,7 +10,8 @@
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-use libgxwi::{App, Facts, Fields, Live, Surface, Value, escape};
+use libgxwi::settings::{self, Glyph, Nav, Section, Tile};
+use libgxwi::{App, Facts, Fields, Live, Surface, Value};
 use libsession::locale::{self, Available};
 
 mod account;
@@ -25,12 +26,35 @@ libgxwi::icon!(b"dev.peios.gxwi-my-settings");
 /// How often the account is read again: nothing says when it changes.
 const LOOK_AGAIN: Duration = Duration::from_secs(5);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum View {
+    Account,
+    Password,
+    Keys,
+    Language,
+}
+
+impl View {
+    const ALL: [(View, &'static str); 4] = [(View::Account, "account"), (View::Password, "password"), (View::Keys, "keys"), (View::Language, "language")];
+
+    fn by(name: &str) -> Option<View> {
+        View::ALL.iter().find(|(_, by)| *by == name).map(|(view, _)| *view)
+    }
+
+    fn id(self) -> &'static str {
+        View::ALL.iter().find(|(view, _)| *view == self).map(|(_, by)| *by).unwrap_or("account")
+    }
+}
+
 struct Settings {
     window: Weak<Surface<Settings>>,
+    view: View,
     account: Account,
     language: Language,
     installed: Vec<Available>,
     removing: Option<Removing>,
+    /// The form to add a key is open.
+    adding: bool,
     said: Option<Result<String, String>>,
 }
 
@@ -45,32 +69,76 @@ impl Settings {
         self.language = language::read();
         self.fill(fields);
     }
+
+    fn nav(&self) -> Vec<Nav> {
+        let section = |view: View, title, now: String, glyph, tile| Nav::Section(Section { id: view.id(), title, now, glyph, tile });
+        vec![
+            section(View::Account, "Your account", account::now_account(&self.account), Glyph::User, Tile::Orange),
+            section(View::Password, "Password", account::now_password(&self.account), Glyph::Lock, Tile::Green),
+            section(View::Keys, "SSH keys", account::now_keys(&self.account), Glyph::Key, Tile::Teal),
+            section(View::Language, "Language & formats", language::now(&self.language, &self.installed), Glyph::Globe, Tile::Violet),
+        ]
+    }
 }
 
 impl Live for Settings {
     fn render(&self, facts: &Facts) -> String {
-        // What authd said comes first, a line each, then the outcome.
-        let lines = |text: &str| text.lines().map(escape).collect::<Vec<_>>().join("<br>");
-        let said = match &self.said {
-            None => String::new(),
-            Some(Ok(done)) => format!("<p class=\"said\" role=\"status\">{}</p>", lines(done)),
-            Some(Err(why)) => format!("<p class=\"said bad\" role=\"alert\">{}</p>", lines(why)),
+        let fields = facts.fields;
+        let page = match self.view {
+            View::Account => account::render_account(&self.account, fields),
+            View::Password => account::render_password(&self.account, fields),
+            View::Keys => account::render_keys(&self.account, fields, self.removing.as_ref(), self.adding),
+            View::Language => language::render(&self.language, &self.installed),
         };
-        format!(
-            "{said}<div class=\"body\"><div class=\"cards\">{}{}</div></div>",
-            account::render(&self.account, facts.fields, self.removing.as_ref()),
-            language::render(&self.language, &self.installed, facts.fields),
-        )
+        let aside = match self.view {
+            View::Language => "Choices apply at once",
+            _ => "",
+        };
+        settings::window(&self.nav(), self.view.id(), &page, &settings::status(self.said.as_ref(), aside))
+    }
+
+    fn input(&mut self, name: &str, fields: &mut Fields) {
+        if name != "lang" && name != "formats" {
+            return;
+        }
+        let done = language::save(fields);
+        if done.is_err() {
+            // What couldn't be done is shown as it still is.
+            language::fill(&self.language, fields);
+        } else {
+            self.language = language::read();
+        }
+        self.said = Some(done);
     }
 
     fn event(&mut self, name: &str, value: &Value, fields: &mut Fields) {
         let done = match name {
-            "save-name" => account::save_name(fields),
-            "change-password" => account::change_password(fields),
-            "add-key" => account::add_key(fields),
+            "section" => {
+                if let Some(view) = value.get("section").and_then(Value::as_str).and_then(View::by) {
+                    self.view = view;
+                    self.said = None;
+                    self.removing = None;
+                    self.adding = false;
+                    account::forget_secrets(fields);
+                }
+                return;
+            }
+            "open-add" => {
+                self.adding = true;
+                self.removing = None;
+                self.said = None;
+                return;
+            }
+            "cancel-add" => {
+                self.adding = false;
+                fields.set("key", "");
+                account::forget_secrets(fields);
+                return;
+            }
             "remove-key" => {
                 let text = |key: &str| value.get(key).and_then(Value::as_str).unwrap_or_default().to_string();
                 self.removing = Some(Removing { fingerprint: text("fingerprint"), label: text("label") });
+                self.adding = false;
                 self.said = None;
                 return;
             }
@@ -79,6 +147,9 @@ impl Live for Settings {
                 account::forget_secrets(fields);
                 return;
             }
+            "save-name" => account::save_name(fields),
+            "change-password" => account::change_password(fields),
+            "add-key" => account::add_key(fields),
             "confirm-remove" => match self.removing.take() {
                 Some(removing) => {
                     let done = account::remove_key(&removing, fields);
@@ -90,7 +161,6 @@ impl Live for Settings {
                 }
                 None => return,
             },
-            "save-language" => language::save(fields),
             _ => return,
         };
         // What was typed into a password field is not kept a moment longer
@@ -101,6 +171,7 @@ impl Live for Settings {
         if succeeded {
             if name == "add-key" {
                 fields.set("key", "");
+                self.adding = false;
             }
             self.reread(fields);
         }
@@ -144,13 +215,15 @@ fn main() {
             std::process::exit(1);
         }
     };
-    app.stylesheet("/gxwi-my-settings.css", include_str!("gxwi-my-settings.css"));
+    settings::stylesheet(&mut app);
     let settings = Settings {
         window: Weak::new(),
+        view: View::Account,
         account: account::read(),
         language: language::read(),
         installed: locale::available(),
         removing: None,
+        adding: false,
         said: None,
     };
     let window = app.live("My Settings", settings);
@@ -163,5 +236,18 @@ fn main() {
     if let Err(e) = app.run() {
         eprintln!("gxwi-my-settings: {e}");
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn each_section_names_a_view() {
+        for (view, by) in View::ALL {
+            assert_eq!(View::by(by), Some(view));
+            assert_eq!(view.id(), by);
+        }
     }
 }

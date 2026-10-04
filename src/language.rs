@@ -2,7 +2,8 @@
 //! which the kernel routes `CurrentUser\Locale` to, and which is yours to
 //! write. Each session reads it as it starts.
 
-use libgxwi::{Fields, escape};
+use libgxwi::Fields;
+use libgxwi::settings::{self, Glyph, Tile};
 use libsession::locale::{self, Available};
 use peios::registry::Data;
 
@@ -50,37 +51,47 @@ fn describe(available: &Available) -> String {
     }
 }
 
-pub fn render(language: &Language, installed: &[Available], fields: &Fields) -> String {
-    let may = language.may.is_ok();
-    let off = if may { "" } else { " disabled" };
-    let machine = installed.iter().find(|a| a.name == language.machine_lang).map_or_else(|| language.machine_lang.clone(), describe);
-    let options = |chosen: &str, first: &str| {
-        let mut html = format!("<option value=\"\"{}>{}</option>", if chosen.is_empty() { " selected" } else { "" }, escape(first));
-        for available in installed {
-            html.push_str(&format!(
-                "<option value=\"{v}\"{s}>{l}</option>",
-                v = escape(&available.name),
-                s = if chosen == available.name { " selected" } else { "" },
-                l = escape(&describe(available))
-            ));
-        }
-        html
-    };
-    let changed = fields.get("lang") != language.lang.as_deref().unwrap_or("") || fields.get("formats") != language.formats.as_deref().unwrap_or("");
-    format!(
-        "<section class=\"card\" aria-label=\"Language and formats\"><h2>Language and formats</h2>\
-         <form class=\"edit\" fx-submit=\"save-language\">\
-         <label>Language<select name=\"lang\"{off}>{langs}</select></label>\
-         <label>Formats<select name=\"formats\"{off}>{formats}</select></label>\
-         <p class=\"hint\">Formats are how dates, numbers, money, measures and paper sizes are written. They apply the next time you sign in. A language that isn't listed is added by an administrator, by installing its language pack.</p>\
-         <div class=\"actions\"><button class=\"primary\"{save}>Save</button></div></form>{why}</section>",
-        langs = options(fields.get("lang"), &format!("As this machine has it: {machine}")),
-        formats = options(fields.get("formats"), "As the language writes them"),
-        save = if may && changed { "" } else { " disabled" },
-        why = match &language.may {
-            Ok(()) => String::new(),
-            Err(why) => format!("<p class=\"why\">{}</p>", escape(why)),
+/// What the side says of this section.
+pub fn now(language: &Language, installed: &[Available]) -> String {
+    match &language.lang {
+        None => "As this machine has it".into(),
+        Some(lang) => match installed.iter().find(|a| &a.name == lang) {
+            Some(Available { language: Some(name), territory: Some(place), .. }) => format!("{name} ({place})"),
+            Some(Available { language: Some(name), .. }) => name.clone(),
+            _ => lang.clone(),
         },
+    }
+}
+
+pub fn render(language: &Language, installed: &[Available]) -> String {
+    let may = language.may.is_ok();
+    let machine = installed.iter().find(|a| a.name == language.machine_lang).map_or_else(|| language.machine_lang.clone(), describe);
+    let options = |first: String| {
+        let mut options = vec![(String::new(), first)];
+        options.extend(installed.iter().map(|a| (a.name.clone(), describe(a))));
+        options
+    };
+    let rows = format!(
+        "{}{}",
+        settings::row(
+            "Language",
+            "What programs speak to you in, where they can.",
+            &settings::select("lang", "Language", &options(format!("As this machine has it: {machine}")), may),
+        ),
+        settings::row(
+            "Formats",
+            "How dates, numbers, money, measures and paper sizes are written.",
+            &settings::select("formats", "Formats", &options("As the language writes them".into()), may),
+        ),
+    );
+    let foot = match &language.may {
+        Err(why) => settings::locked(why),
+        Ok(()) => settings::hint("Each applies the next time you sign in. A language that isn't listed is added by an administrator, by installing its language pack."),
+    };
+    format!(
+        "{}{}",
+        settings::head(Glyph::Globe, Tile::Violet, "Language & formats", "Yours, over this machine's."),
+        settings::group("Language and formats", &rows, &foot)
     )
 }
 
