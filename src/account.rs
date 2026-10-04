@@ -11,7 +11,7 @@
 
 use libauthd::Secret;
 use libauthd::credential::Policy;
-use libauthd_client::credential::{Abandon, Collector, Credentials, MessageSeverity, Refusal, Round};
+use libauthd_client::credential::{Abandon, Collector, Credentials, Refusal, Round};
 use libauthd_client::own::{Own, OwnAccount};
 use libgxwi::{Fields, escape};
 
@@ -159,8 +159,11 @@ pub fn save_name(fields: &Fields) -> Result<String, String> {
     Ok(if name.is_empty() { "Your name is taken away.".into() } else { format!("Your name is {name}.") })
 }
 
-/// Answers each round from what the form holds, in order, and keeps what
-/// the authority said, for the window to show.
+/// Answers each round from what the form holds, in order, and keeps every
+/// message the authority sent, in order, for the window to show with the
+/// outcome (PGSS §2.8: a client displays what it is sent, and doesn't read
+/// meaning into it). The form was filled before the conversation began, so
+/// they are shown after it rather than before each prompt.
 struct Form {
     answers: std::collections::VecDeque<Secret>,
     said: Vec<String>,
@@ -168,15 +171,18 @@ struct Form {
 
 impl Collector for Form {
     fn round(&mut self, round: &Round) -> Result<Vec<Secret>, Abandon> {
-        for notice in &round.messages {
-            if notice.severity == MessageSeverity::Error {
-                self.said.push(notice.text.clone());
-            }
-        }
+        self.said.extend(round.messages.iter().map(|notice| notice.text.clone()));
         if self.answers.len() < round.prompts.len() {
-            return Err(Abandon::new(self.said.last().cloned().unwrap_or_else(|| "It asked for more than was given.".into())));
+            return Err(Abandon::new("It asked for more than the form holds."));
         }
         Ok(round.prompts.iter().filter_map(|_| self.answers.pop_front()).collect())
+    }
+}
+
+impl Form {
+    /// What the authority said, then the window's own words, a line each.
+    fn with(&self, ours: &str) -> String {
+        self.said.iter().map(String::as_str).chain([ours]).filter(|line| !line.is_empty()).collect::<Vec<_>>().join("\n")
     }
 }
 
@@ -184,18 +190,25 @@ fn form(answers: &[&str]) -> Form {
     Form { answers: answers.iter().map(|a| Secret::from_slice(a.as_bytes())).collect(), said: Vec::new() }
 }
 
-/// What a refusal means, in words.
-fn refused(refusal: &Refusal, form: &Form, what: &str) -> String {
-    if refusal.wrong_password() {
-        return "That isn't your current password.".into();
-    }
-    if refusal.outcome_unknown() {
-        return format!("It isn't known whether {what} happened: the authority stopped answering. Look again in a moment.");
-    }
-    match form.said.last() {
-        Some(said) => said.clone(),
-        None => refusal.to_string(),
-    }
+/// The outcome of a conversation, in words: what the authority said, and
+/// what the refusal's code means. The code is branched on, never the text.
+fn outcome(result: Result<(), Refusal>, form: &Form, done: &str, what: &str) -> Result<String, String> {
+    let refusal = match result {
+        Ok(()) => return Ok(form.with(done)),
+        Err(refusal) => refusal,
+    };
+    Err(if refusal.wrong_password() {
+        form.with("That isn't your current password.")
+    } else if refusal.credential_rejected() {
+        form.with(&format!("That key can't be added: {refusal}."))
+    } else if refusal.outcome_unknown() {
+        form.with(&format!("It isn't known whether {what} happened: the authority stopped answering. Look again in a moment."))
+    } else if form.said.is_empty() {
+        refusal.to_string()
+    } else {
+        // A refusal's own words repeat the last message it was sent.
+        form.with("")
+    })
 }
 
 pub fn change_password(fields: &Fields) -> Result<String, String> {
@@ -204,10 +217,8 @@ pub fn change_password(fields: &Fields) -> Result<String, String> {
         return Err("The new password and the one again aren't the same.".into());
     }
     let mut collector = form(&[current, new, confirm]);
-    match Credentials::new().change_password(&mut collector) {
-        Ok(()) => Ok("Your password is changed. Use it the next time you sign in.".into()),
-        Err(refusal) => Err(refused(&refusal, &collector, "the change")),
-    }
+    let result = Credentials::new().change_password(&mut collector);
+    outcome(result, &collector, "Your password is changed. Use it the next time you sign in.", "the change")
 }
 
 pub fn add_key(fields: &Fields) -> Result<String, String> {
@@ -216,17 +227,12 @@ pub fn add_key(fields: &Fields) -> Result<String, String> {
         return Err("A public key is one line.".into());
     }
     let mut collector = form(&[fields.get("key-password")]);
-    match Credentials::new().add_key(&line, &mut collector) {
-        Ok(()) => Ok("The key is added.".into()),
-        Err(refusal) if refusal.credential_rejected() => Err(format!("That key can't be added: {refusal}.")),
-        Err(refusal) => Err(refused(&refusal, &collector, "adding it")),
-    }
+    let result = Credentials::new().add_key(&line, &mut collector);
+    outcome(result, &collector, "The key is added.", "adding it")
 }
 
 pub fn remove_key(removing: &Removing, fields: &Fields) -> Result<String, String> {
     let mut collector = form(&[fields.get("remove-password")]);
-    match Credentials::new().remove_key(&removing.fingerprint, &mut collector) {
-        Ok(()) => Ok("The key is taken away.".into()),
-        Err(refusal) => Err(refused(&refusal, &collector, "taking it away")),
-    }
+    let result = Credentials::new().remove_key(&removing.fingerprint, &mut collector);
+    outcome(result, &collector, "The key is taken away.", "taking it away")
 }

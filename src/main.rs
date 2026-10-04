@@ -49,10 +49,12 @@ impl Settings {
 
 impl Live for Settings {
     fn render(&self, facts: &Facts) -> String {
+        // What authd said comes first, a line each, then the outcome.
+        let lines = |text: &str| text.lines().map(escape).collect::<Vec<_>>().join("<br>");
         let said = match &self.said {
             None => String::new(),
-            Some(Ok(done)) => format!("<p class=\"said\" role=\"status\">{}</p>", escape(done)),
-            Some(Err(why)) => format!("<p class=\"said bad\" role=\"alert\">{}</p>", escape(why)),
+            Some(Ok(done)) => format!("<p class=\"said\" role=\"status\">{}</p>", lines(done)),
+            Some(Err(why)) => format!("<p class=\"said bad\" role=\"alert\">{}</p>", lines(why)),
         };
         format!(
             "{said}<div class=\"body\"><div class=\"cards\">{}{}</div></div>",
@@ -78,7 +80,14 @@ impl Live for Settings {
                 return;
             }
             "confirm-remove" => match self.removing.take() {
-                Some(removing) => account::remove_key(&removing, fields),
+                Some(removing) => {
+                    let done = account::remove_key(&removing, fields);
+                    // Refused, it is still asked, for the password again.
+                    if done.is_err() {
+                        self.removing = Some(removing);
+                    }
+                    done
+                }
                 None => return,
             },
             "save-language" => language::save(fields),
