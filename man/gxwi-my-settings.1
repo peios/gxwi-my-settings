@@ -1,0 +1,69 @@
+.TH GXWI-MY-SETTINGS 1 "2026-10-06" "Peios"
+.SH NAME
+gxwi-my-settings \- change your own name, password, SSH keys and language on a GXWI desktop
+.SH SYNOPSIS
+.B gxwi-my-settings
+.SH DESCRIPTION
+My Settings is the window for a person's own account: the settings that
+belong to them on the system rather than to a desktop. Open it from the
+launcher (type my). It takes no arguments. Run with none and no desktop to
+open on, it says so and points to
+.BR passwd (1)
+and
+.BR lps (1),
+which do the same at a terminal.
+.PP
+Everything in it acts on whoever is looking, and on nobody else. The
+daemons it asks take the person from their token and are told no name, so
+no one can change another's account here. It has four sections.
+.PP
+Account shows the account name, the display name and the sign-in method.
+Display Name sets the name shown beside the account name, with Apply once
+it is changed; it asks for no password, and the desktop shows it from the
+next sign-in. The account name and the sign-in method are an
+administrator's to change, in Principals Manager.
+.PP
+Password changes the password used to sign in here and over SSH. It asks
+for the current password and the new one twice, and the authority checks
+them by the same rules as anywhere else. The line along the bottom says
+what the authority said, and the password fields are emptied whatever
+happened. The new password is used from the next sign-in.
+.PP
+SSH Keys lists the person's keys by label, fingerprint, type and the day
+each was added. Add Key opens a form for the one line of a .pub file and the
+password; Remove asks for the password under the key before taking it away.
+.PP
+Every change to a password or key asks for the current password first: a
+desktop left signed in is not proof that the person at it is its owner. An
+account with no password to give, one that signs in with keys only, sees
+why in place of these forms, and its keys are an administrator's to change.
+.PP
+Language & Formats chooses the person's language and how dates, numbers,
+currency, measurements and paper sizes are written, from the languages
+installed. System Default and Match Language remove the person's own value.
+Each choice is written as it is made, under CurrentUser\eLocale, which is
+the person's Users\e<SID>\eLocale, and applies from the next sign-in.
+Whether it may be changed is asked of the registry; if someone has narrowed
+who may, the section is shown read-only and says so.
+.PP
+The account is read again every five seconds, so a change made elsewhere
+shows here.
+.SH FILES
+.TP
+.I /usr/share/apps/dev.peios.gxwi-my-settings.toml
+Its application declaration.
+.TP
+.I /run/lpsd/self.sock
+lpsd's self socket, where the account is read and the display name set.
+.TP
+.I /run/logon.sock
+The authority's logon socket, where the password and keys are changed.
+.TP
+.I /usr/lib/x86_64-linux-peios/locale
+The installed languages it offers.
+.SH SEE ALSO
+.BR passwd (1),
+.BR lps (1).
+.PP
+The passwd command, The lps command (Changing your own keys) and Session
+locales, at learn.peios.org.
