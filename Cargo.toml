@@ -8,16 +8,16 @@ publish = false
 [dependencies]
 # libgxwi as of the gxwi release dev.peios.gxwi-sdk stages, which a package
 # build takes it from (gxwi's dev/pins.toml).
-libgxwi = { git = "https://github.com/peios/gxwi.git", rev = "5629140add3de075511b3379fd690fdabd06dcaf" }
+libgxwi = { git = "https://github.com/peios/gxwi.git", rev = "e9d86e56e8d79b4240ff5114434b4cdc0c5b1f76" }
 # The registry. Every crate in one program must pin the same revision:
 # `peios-sys` links libpeios, and a program can hold only one.
 peios = { git = "https://github.com/peios/peios-rs.git", rev = "f8c84930f2b71763bcf0550df0b1420a0f63b21e", package = "peios" }
 # Changing one's own password and keys (authd's logon socket), and reading
 # one's own account and setting one's display name (lpsd's self socket).
-libauthd-client = { git = "https://github.com/peios/authd.git", rev = "90471e3d4db127528862fb325b04edb3d4f0fc30" }
-libauthd = { git = "https://github.com/peios/authd.git", rev = "90471e3d4db127528862fb325b04edb3d4f0fc30" }
+libauthd-client = { git = "https://github.com/peios/authd.git", rev = "1a421053deb0cf9703ee1e109db3792f7e1bb95d" }
+libauthd = { git = "https://github.com/peios/authd.git", rev = "1a421053deb0cf9703ee1e109db3792f7e1bb95d" }
 # Which languages are installed, and what a session will honour.
-libsession = { git = "https://github.com/peios/authd.git", rev = "90471e3d4db127528862fb325b04edb3d4f0fc30" }
+libsession = { git = "https://github.com/peios/authd.git", rev = "1a421053deb0cf9703ee1e109db3792f7e1bb95d" }
 jiff = "0.2.29"
 
 [dev-dependencies]
